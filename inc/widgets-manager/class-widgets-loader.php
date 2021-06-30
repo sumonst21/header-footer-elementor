@@ -12,6 +12,7 @@
 namespace HFE\WidgetsManager;
 
 use Elementor\Plugin;
+use Elementor\Utils;
 
 defined( 'ABSPATH' ) or exit;
 
@@ -59,7 +60,7 @@ class Widgets_Loader {
 
 		// Refresh the cart fragments.
 		if ( class_exists( 'woocommerce' ) ) {
-			add_action( 'elementor/editor/before_enqueue_scripts', [ $this, 'init_cart' ], 10, 0 );
+
 			add_filter( 'woocommerce_add_to_cart_fragments', [ $this, 'wc_refresh_mini_cart_count' ] );
 		}
 	}
@@ -130,6 +131,16 @@ class Widgets_Loader {
 			}
 		}
 
+		$tag_validation = [ 'article', 'aside', 'div', 'footer', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'main', 'nav', 'p', 'section', 'span' ];
+
+		wp_localize_script(
+			'elementor-editor',
+			'HfeWidgetsData',
+			[
+				'allowed_tags' => $tag_validation,
+			]
+		);
+
 		// Emqueue the widgets style.
 		wp_enqueue_style( 'hfe-widgets-style', HFE_URL . 'inc/widgets-css/frontend.css', [], HFE_VER );
 	}
@@ -155,7 +166,7 @@ class Widgets_Loader {
 	 * @param object $this_cat class.
 	 */
 	public function register_widget_category( $this_cat ) {
-		$category = __( 'Header, Footer & Blocks', 'header-footer-elementor' );
+		$category = __( 'Elementor Header & Footer Builder', 'header-footer-elementor' );
 
 		$this_cat->add_category(
 			'hfe-widgets',
@@ -195,23 +206,6 @@ class Widgets_Loader {
 	}
 
 	/**
-	 * Initialize the cart.
-	 *
-	 * @since 1.5.0
-	 * @access public
-	 */
-	public function init_cart() {
-		$has_cart = is_a( WC()->cart, 'WC_Cart' );
-
-		if ( ! $has_cart ) {
-			$session_class = apply_filters( 'woocommerce_session_handler', 'WC_Session_Handler' );
-			WC()->session  = new $session_class();
-			WC()->session->init();
-			WC()->customer = new \WC_Customer( get_current_user_id(), true );
-		}
-	}
-
-	/**
 	 * Cart Fragments.
 	 *
 	 * Refresh the cart fragments.
@@ -223,21 +217,41 @@ class Widgets_Loader {
 	public function wc_refresh_mini_cart_count( $fragments ) {
 
 		$has_cart = is_a( WC()->cart, 'WC_Cart' );
+
 		if ( ! $has_cart ) {
 			return $fragments;
 		}
 
-		ob_start();
+		$cart_badge_count = ( null !== WC()->cart ) ? WC()->cart->get_cart_contents_count() : '';
 
-		include HFE_DIR . '/inc/widgets-manager/widgets/class-cart.php';
+		if ( null !== WC()->cart ) {
 
-		$cart_type = get_option( 'hfe_cart_widget_type' );
+			$fragments['span.hfe-cart-count'] = '<span class="hfe-cart-count">' . WC()->cart->get_cart_contents_count() . '</span>';
 
-		\HFE\WidgetsManager\Widgets\Cart::get_cart_link( $cart_type );
+			$fragments['span.elementor-button-text.hfe-subtotal'] = '<span class="elementor-button-text hfe-subtotal">' . WC()->cart->get_cart_subtotal() . '</span>';
+		}
 
-		$fragments['body:not(.elementor-editor-active) a.hfe-cart-container'] = ob_get_clean();
+		$fragments['span.elementor-button-icon[data-counter]'] = '<span class="elementor-button-icon" data-counter="' . $cart_badge_count . '"><i class="eicon" aria-hidden="true"></i><span class="elementor-screen-only">' . __( 'Cart', 'header-footer-elementor' ) . '</span></span>';
 
 		return $fragments;
+	}
+
+	/**
+	 * Validate an HTML tag against a safe allowed list.
+	 *
+	 * @since 1.5.8
+	 * @param string $tag specifies the HTML Tag.
+	 * @access public
+	 */
+	public static function validate_html_tag( $tag ) {
+
+		// Check if Elementor method exists, else we will run custom validation code.
+		if ( method_exists( 'Elementor\Utils', 'validate_html_tag' ) ) {
+			return Utils::validate_html_tag( $tag );
+		} else {
+			$allowed_tags = [ 'article', 'aside', 'div', 'footer', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'main', 'nav', 'p', 'section', 'span' ];
+			return in_array( strtolower( $tag ), $allowed_tags ) ? $tag : 'div';
+		}
 	}
 }
 
